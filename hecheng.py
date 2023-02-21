@@ -1,54 +1,68 @@
-import os
-import cv2
-import dlib
+import streamlit as st
+from PIL import Image, ImageFilter
+import requests
+from io import BytesIO
 import numpy as np
-from flask import Flask, render_template, request, redirect, url_for
-
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'static/uploads/'
-
-# 人脸识别模型
-detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor('shape_predictor_68_face_landmarks.dat')
+import cv2
 
 
-# 提取面部特征
-def get_landmarks(image):
-    rects = detector(image, 1)
-    if len(rects) == 0:
-        return None
-    return np.matrix([[p.x, p.y] for p in predictor(image, rects[0]).parts()])
+@st.cache
+def load_image(image_file):
+    img = Image.open(image_file)
+    return img
 
 
-# 根据面部特征生成孩子面部特征
-def generate_child_feature(mother_landmarks, father_landmarks):
-    child_landmarks = np.zeros((68, 2))
-    for i in range(68):
-        if i < 30:
-            child_landmarks[i] = mother_landmarks[i]
-        else:
-            child_landmarks[i] = father_landmarks[i]
-    return child_landmarks
+def image_to_array(image):
+    img_array = np.array(image.convert("RGB"))
+    img_array = img_array[:, :, ::-1].copy()
+    return img_array
 
 
-# 生成孩子照片
-def generate_child_photo(mother_img, father_img):
-    # 读取父亲、母亲的照片
-    mother = cv2.imread(mother_img)
-    father = cv2.imread(father_img)
+def array_to_image(img_array):
+    img = Image.fromarray(np.uint8(img_array))
+    return img
 
-    # 提取面部特征
-    mother_landmarks = get_landmarks(mother)
-    father_landmarks = get_landmarks(father)
 
-    # 生成孩子面部特征
-    child_landmarks = generate_child_feature(mother_landmarks, father_landmarks)
+def morphing(father_image, mother_image, child_ratio=0.5):
+    father_array = image_to_array(father_image)
+    mother_array = image_to_array(mother_image)
 
-    # 生成孩子照片
-    child = np.zeros(mother.shape, dtype=np.uint8)
-    hull = cv2.convexHull(np.array(child_landmarks), returnPoints=False)
-    cv2.fillConvexPoly(child, hull, (255, 255, 255))
-    mask = np.zeros(mother.shape, dtype=np.uint8)
-    cv2.fillConvexPoly(mask, hull, (255, 255, 255))
-    mother_face = cv2.bitwise_and(mother, mask)
-    child_face =
+    assert father_array.shape == mother_array.shape
+
+    mask = np.zeros(father_array.shape, dtype=np.float32)
+    mask[:, :int(father_array.shape[1]*child_ratio), :] = 1
+
+    father_mask = father_array * mask
+    mother_mask = mother_array * (1 - mask)
+
+    child_array = father_mask + mother_mask
+    child_image = array_to_image(child_array)
+
+    return child_image
+
+
+def main():
+    st.title("Generate a Child's Photo")
+
+    st.write("Please upload photos of father and mother.")
+
+    father_image = st.file_uploader("Father's Photo", type=["jpg", "jpeg", "png"])
+    mother_image = st.file_uploader("Mother's Photo", type=["jpg", "jpeg", "png"])
+
+    if father_image and mother_image:
+        col1, col2 = st.beta_columns(2)
+        with col1:
+            st.write("Father's Photo")
+            st.image(father_image, use_column_width=True)
+
+        with col2:
+            st.write("Mother's Photo")
+            st.image(mother_image, use_column_width=True)
+
+        if st.button("Generate"):
+            child_image = morphing(father_image, mother_image)
+            st.image(child_image, use_column_width=True)
+
+
+if __name__ == "__main__":
+    main()
