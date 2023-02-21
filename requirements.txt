@@ -1,4 +1,4 @@
-os
-cv2
-dlib
+streamlit
+requests
 numpy
+cv2
