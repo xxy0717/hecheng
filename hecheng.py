@@ -1,4 +1,4 @@
-pip install opencv-python
+python -m pip install --upgrade pip
 
 import streamlit as st
 from PIL import Image, ImageFilter
